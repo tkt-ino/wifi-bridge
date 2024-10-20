@@ -4,14 +4,14 @@ import subprocess
 
 class Bridge:
     def __init__(
-            self,
-            apmac: str,
-            clientmac: str,
-            real_nic: str,
-            rouge_nic: str,
-            real_ch: int,
-            rouge_ch: int,
-        ) -> None:
+        self,
+        apmac: str,
+        clientmac: str,
+        real_nic: str,
+        rouge_nic: str,
+        real_ch: int,
+        rouge_ch: int,
+    ) -> None:
         self.apmac = apmac
         self.clientmac = clientmac
         self.real_nic = real_nic
@@ -26,12 +26,11 @@ class Bridge:
         self.rouge_sock = None
     
     def init_socket(self) -> None:
-        log(STATUS, f"Initialize sockets. real:{self.real_nic_mon}, rouge:{self.rouge_nic_mon}")
         self.real_sock = MonitorSocket(type=ETH_P_ALL, iface=self.real_nic_mon)
         self.rouge_sock = MonitorSocket(type=ETH_P_ALL, iface=self.rouge_nic_mon)
+        log(STATUS, f"Initialize sockets. real:{self.real_nic_mon}, rouge:{self.rouge_nic_mon}")
 
     def set_bpf_filter(self) -> None:
-        log(STATUS, "Set BPF filter.")
         # AP => Client
         real_bpf = f"(wlan type data) and (wlan addr1 {self.clientmac}) and (wlan addr2 {self.apmac})"
         self.real_sock.attach_filter(real_bpf)
@@ -39,6 +38,8 @@ class Bridge:
         # Client => AP
         rouge_bpf = f"(wlan type data) and (wlan addr1 {self.apmac}) and (wlan addr2 {self.clientmac})"
         self.rouge_sock.attach_filter(rouge_bpf)
+
+        log(STATUS, "Set BPF filter.")
 
     def handle_rx_real_ch(self) -> None:
         """
@@ -53,7 +54,7 @@ class Bridge:
         """
         Client -> AP
         """
-        packet = self.real_sock.recv()
+        packet = self.rouge_sock.recv()
         if packet == None: return
         if Dot11CCMP not in packet: return
         self.real_sock.send(packet)
@@ -79,11 +80,3 @@ class Bridge:
     def airmon_ng_start(self, iface: str, channel: str):
         cmd = ["airmon-ng", "start", iface, channel]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
-
-def cleanup(bridge_obj: Bridge) -> None:
-    bridge_obj.stop()
-
-if __name__ == "__main__":
-    bridge = Bridge("00:01:02:03:04:05", "ff:ff:ff:ff:ff:ff", "wlan0", "wlan1", 1, 11)
-    atexit.register(cleanup, bridge_obj=bridge)
-    bridge.start()
